@@ -26,23 +26,20 @@ def sha(the_bytes):
     return hashing.hexdigest()
 
 
-def same_savegame(path, file_hash, connection):
-    """Check if the savegame is still the same game."""
+def saved_before(path, file_hash, connection):
+    """Check if the savegame has been saved before."""
     cursor = connection.cursor()
     sql = ("select hash from savegame_history "
-           "where path = ? "
-           "order by date desc "
-           "limit 1")
+           "where path = ? ")
     cursor.execute(sql, (path,))
-    result = cursor.fetchone()
+    result = cursor.fetchall()
     connection.commit()
-    # print(cursor.rowcount)
     try:
-        lasthash = result[0]
+        lasthashes = {row[0] for row in result}
     except TypeError:
         print("No savegame yet")
         return False
-    return lasthash == file_hash
+    return file_hash in lasthashes
 
 
 def save_new_game(path, connection):
@@ -52,7 +49,7 @@ def save_new_game(path, connection):
     with open(path, "rb") as file:
         content = file.read()
     file_hash = sha(content)
-    if not same_savegame(path, file_hash, connection):
+    if not saved_before(path, file_hash, connection):
         mtime = datetime.datetime.utcfromtimestamp(os.path.getmtime(path))
         sql = "insert into savegame_history values (?, ?, ?, ?)"
         cursor.execute(sql, (path, mtime, content, file_hash))
@@ -87,7 +84,10 @@ class GameSelect(tk.Frame):  # pylint: disable=R0901
         self.parent = parent
         label = tk.Label(self, text="Games")
         label.grid(row=0, column=0, sticky="NEWS")
-        listbox = tk.Listbox(self, width=40)
+        scrollbar = tk.Scrollbar(self, orient="vertical")
+        scrollbar.grid(row=1, column=1, sticky="NS")
+        listbox = tk.Listbox(self, width=40, yscrollcommand=scrollbar.set)
+        scrollbar.config(command=listbox.yview)
         listbox.configure(exportselection=False)
         listbox.bind("<<ListboxSelect>>",
                      # lambda x: self.update_savegame_list())
@@ -145,7 +145,10 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         self.parent = parent
         label = tk.Label(self, text="Savegames")
         label.grid(row=0, column=0, sticky="NEWS")
-        listbox = tk.Listbox(self, width=40)
+        scrollbar = tk.Scrollbar(self, orient="vertical")
+        scrollbar.grid(row=1, column=1, sticky="NS")
+        listbox = tk.Listbox(self, width=40, yscrollcommand=scrollbar.set)
+        scrollbar.config(command=listbox.yview)
         listbox.configure(exportselection=False)
         for item in ["Savegame1", "Savegame2", "Savegame3", "Savegame4"]:
             listbox.insert(tk.END, item)
@@ -174,7 +177,6 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         new_savegame = filedialog.askopenfilename(
             parent=self, initialdir=os.getcwd(),
             title="Select a savegame of {} to watch.".format(current_game))
-        print(repr(new_savegame))
         if new_savegame is not None and new_savegame != "":
             sql = "insert into games (game, path) values (?, ?)"
             self.parent.cursor.execute(sql, (current_game, new_savegame))
@@ -223,11 +225,17 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         scrollbar.grid(row=1, column=1, sticky="NS")
         for item in ["2015", "2016", "2017", "2018"]:
             listbox.insert(tk.END, item)
-        listbox.bind(
-            "<<ListboxSelect>>",
-            lambda x: print(listbox.curselection()))
+        # listbox.bind(
+        #     "<<ListboxSelect>>",
+        #     lambda x: print(self.get_identifier()))
         listbox.grid(row=1, column=0, sticky="NEWS")
+
+        button = tk.Button(self, text="Refresh",
+                           command=lambda: self.parent.trigger_update(0))
+        button.grid(row=2, column=0, sticky="NEWS")
+
         self.listbox = listbox
+        self.data = None
 
     def update_content(self):
         """Refresh the contents of the listbox."""
@@ -236,20 +244,42 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         listbox = self.listbox
         # path = self.data[selection[0]]
         listbox.delete(0, tk.END)
-        sql = ("select date from savegame_history "
+        sql = ("select date, path from savegame_history "
                "where path = ? "
                "order by date desc")
         cursor.execute(sql, (path,))
-        items = [row[0] for row in cursor.fetchall()]
-        for item in items:
+        self.data = cursor.fetchall()
+        titles = [row[0] for row in self.data]
+        for item in titles:
             item = item.strftime("%y-%m-%d %H:%M:%S")
             self.listbox.insert(tk.END, item)
         self.listbox.select_set(0)
         self.parent.connection.commit()
 
     def get_selected(self):
-        """Get the currently selected items in the listbox."""
+        """Get the currently selected index in the listbox."""
         return self.listbox.curselection()
+
+    def get_identifier(self):
+        """Get the date and the path of the current selection."""
+        row = self.data[self.get_selected()[0]]
+        return row["date"], row["path"]
+
+    def write_file(self):
+        """Replace the current savegame with the selected one."""
+        identifier = self.get_identifier()
+        cursor = self.parent.cursor
+        # print((identifier))
+        sql = ("select path, savegame from savegame_history "
+               "where date = ? and path = ?")
+        cursor.execute(sql, identifier)
+        data = cursor.fetchall()
+        if len(data) > 1:
+            print("Oops! Double entries in savegame_history table!")
+            exit(1)
+        row = data[0]
+        with open(row["path"], "wb") as file:
+            file.write(row["savegame"])
 
 
 class App(tk.Frame):  # pylint: disable=R0901
@@ -257,7 +287,8 @@ class App(tk.Frame):  # pylint: disable=R0901
 
     def __init__(self, parent, connection):
         super().__init__(parent)
-        # self.parent = parent
+        # self.parent = parent  # Not needed?
+        connection.row_factory = litedb.sqlite3.Row
         self.connection = connection
         # self.cursor = self.connection.cursor()
         # self.gamebox = None
@@ -287,7 +318,7 @@ class App(tk.Frame):  # pylint: disable=R0901
             if selection == tuple():
                 print("No game state selected!")
                 return
-            return  # TODO:
+            self.savegame_states.write_file()
         button = tk.Button(self, text="Restore", command=restore_function)
         button.grid(row=1, column=4)
 
