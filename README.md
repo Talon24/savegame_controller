@@ -7,6 +7,8 @@ Copy this file in the folder that contains your savegame files. On Execution, it
 
 If the last backup-file is identical to the original file, no new backup will be created.
 
+The Manager checks for file changes every few seconds and saves a new version to a database if there is a change. backup_once does the lookup once without calling the gui.
+
 ## Todo
 
-Use sqlite to store the savegames and keep better metadata and some better interface to restore archived savegames.
+Option to ignore certain savegames from auto-updating and have a button that force-updates on these.
