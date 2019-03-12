@@ -10,6 +10,7 @@ import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog
+from tkinter import messagebox
 from tkinter import simpledialog
 # import tkinter.ttk as ttk
 
@@ -17,6 +18,7 @@ import litedb
 import database_set_up
 
 STOP_EVENT = threading.Event()
+# SYNC_ALL = threading.Event()
 
 
 def sha(the_bytes):
@@ -135,7 +137,10 @@ class GameSelect(tk.Frame):  # pylint: disable=R0901
 
     def get_selected(self):
         """Get the currently selected items in the listbox."""
-        return self.data[self.listbox.curselection()[0]]
+        selected = self.listbox.curselection()
+        if selected == tuple():
+            return None
+        return self.data[selected[0]]
 
 
 class SavegameSelect(tk.Frame):  # pylint: disable=R0901
@@ -150,12 +155,13 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         listbox = tk.Listbox(self, width=40, yscrollcommand=scrollbar.set)
         scrollbar.config(command=listbox.yview)
         listbox.configure(exportselection=False)
-        for item in ["Savegame1", "Savegame2", "Savegame3", "Savegame4"]:
-            listbox.insert(tk.END, item)
+        # for item in ["Savegame1", "Savegame2", "Savegame3", "Savegame4"]:
+        #     listbox.insert(tk.END, item)
         listbox.bind("<<ListboxSelect>>",
                      # lambda x: self.update_savegame_states_box())
                      lambda x: self.parent.trigger_update(0))
         listbox.grid(row=1, column=0, sticky="NEWS")
+
         listbox.popup_menu = tk.Menu(listbox, tearoff=0)
         listbox.popup_menu.add_command(
             label="Delete", command=lambda x: print("Delete"))
@@ -187,7 +193,10 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         """Refresh the contents of the listbox."""
         cursor = self.parent.cursor
         listbox = self.listbox
-        gamename = self.parent.games.get_selected()[0]
+        gamename = self.parent.games.get_selected()  # all selected
+        if gamename is None:
+            return
+        gamename = gamename[0]  # first selected
         sql = ("select path from games "
                "where game like ? "
                "order by path asc")
@@ -207,7 +216,11 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
 
     def get_selected_path(self):
         """Return the Path of the currently selected item"""
-        return self.data[self.get_selected()[0]]
+        # return self.data[self.get_selected()[0]]
+        selected = self.listbox.curselection()
+        if selected == tuple():
+            return None
+        return self.data[selected[0]]
 
 
 class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
@@ -219,12 +232,13 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         label.grid(row=0, column=0, sticky="NEWS")
         scrollbar = tk.Scrollbar(self, orient="vertical")
         listbox = tk.Listbox(self, width=(10 + 1 + 8 + 4),
+                             selectmode='extended',
                              yscrollcommand=scrollbar.set)
         listbox.configure(exportselection=False)
         scrollbar.config(command=listbox.yview)
         scrollbar.grid(row=1, column=1, sticky="NS")
-        for item in ["2015", "2016", "2017", "2018"]:
-            listbox.insert(tk.END, item)
+        # for item in ["2015", "2016", "2017", "2018"]:
+        #     listbox.insert(tk.END, item)
         # listbox.bind(
         #     "<<ListboxSelect>>",
         #     lambda x: print(self.get_identifier()))
@@ -234,13 +248,25 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                            command=lambda: self.parent.trigger_update(0))
         button.grid(row=2, column=0, sticky="NEWS")
 
+        listbox.popup_menu = tk.Menu(listbox, tearoff=0)
+        listbox.popup_menu.add_command(label="Abort")
+        listbox.popup_menu.add_separator()
+        listbox.popup_menu.add_command(
+            label="Delete", command=lambda: print("Delete"))
+        # listbox.popup_menu.add_command(
+        #     label="Select All", command=lambda: print())
+        listbox.bind("<Button-3>", lambda x: self.parent.popup(listbox, x))
+
         self.listbox = listbox
         self.data = None
 
     def update_content(self):
         """Refresh the contents of the listbox."""
         cursor = self.parent.cursor
-        path = self.parent.savegames.get_selected_path()[0]
+        path = self.parent.savegames.get_selected_path()  # all selected
+        if path is None:
+            return
+        path = path[0]  # first path
         listbox = self.listbox
         # path = self.data[selection[0]]
         listbox.delete(0, tk.END)
@@ -260,23 +286,44 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         """Get the currently selected index in the listbox."""
         return self.listbox.curselection()
 
-    def get_identifier(self):
-        """Get the date and the path of the current selection."""
-        row = self.data[self.get_selected()[0]]
-        return row["date"], row["path"]
+    # def get_identifier(self):
+    #     """Get the date and the path of the current selection."""
+    #     if len(self.get_selected()) != 1:
+    #         messagebox.showerror(title="Multiple Entries are selected",
+    #                              message="You cannot restore "
+    #                              "multiple file versions!")
+    #         return None
+    #     row = self.data[self.get_selected()[0]]
+    #     return row["date"], row["path"]
 
     def write_file(self):
         """Replace the current savegame with the selected one."""
-        identifier = self.get_identifier()
+        # identifier = self.get_identifier()
+        selection = self.get_selected()
+        if len(selection) != 1:
+            messagebox.showerror(title="Multiple Entries are selected",
+                                 message="You cannot restore "
+                                 "multiple file versions!")
+            return
+        row = self.data[selection[0]]
+        path = pathlib.Path(row["path"])
+        confirmed = messagebox.askokcancel(
+            title="Confirmation", message="Really overwrite file {} ?"
+            "".format(path.parts[-1]))
+        print(confirmed)
+        if not confirmed:
+            return
         cursor = self.parent.cursor
         # print((identifier))
         sql = ("select path, savegame from savegame_history "
                "where date = ? and path = ?")
-        cursor.execute(sql, identifier)
+        cursor.execute(sql, (row["date"], row["path"]))
         data = cursor.fetchall()
         if len(data) > 1:
-            print("Oops! Double entries in savegame_history table!")
-            exit(1)
+            messagebox.showerror(
+                title="Database Inconsistency!",
+                message="Double entries in savegame_history table!")
+            return
         row = data[0]
         with open(row["path"], "wb") as file:
             file.write(row["savegame"])
