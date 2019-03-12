@@ -14,7 +14,7 @@ from tkinter import messagebox
 from tkinter import simpledialog
 # import tkinter.ttk as ttk
 
-import litedb
+import database
 import database_set_up
 
 STOP_EVENT = threading.Event()
@@ -74,7 +74,7 @@ def check_db(connection):
     cursor = connection.cursor()
     try:
         cursor.execute("select * from games limit 1")
-    except litedb.sqlite3.OperationalError:
+    except database.sqlite3.OperationalError:
         database_set_up.setup(cursor)
         print("Setting up Database!")
 
@@ -335,7 +335,7 @@ class App(tk.Frame):  # pylint: disable=R0901
     def __init__(self, parent, connection):
         super().__init__(parent)
         # self.parent = parent  # Not needed?
-        connection.row_factory = litedb.sqlite3.Row
+        connection.row_factory = database.sqlite3.Row
         self.connection = connection
         # self.cursor = self.connection.cursor()
         # self.gamebox = None
@@ -405,7 +405,7 @@ def check_for_updates():
 
 def watch_files_caller():
     """schedule!"""
-    connection = litedb.get_connect()
+    connection = database.get_connect()
     check_watched_files(connection)
     finished = time.time()
     while not STOP_EVENT.is_set():
@@ -435,7 +435,7 @@ def check_watched_files(connection):
 def main():
     """main func"""
     # connection = sqlite3.connect("Testdb.db")
-    connection = litedb.get_connect()
+    connection = database.get_connect()
     check_db(connection)
     check_watched_files(connection)
     connection.close()
@@ -443,7 +443,7 @@ def main():
     default_font = tkfont.nametofont("TkDefaultFont")
     default_font.configure(size=16)
     master.option_add("*Font", default_font)
-    app = App(master, litedb.get_connect())
+    app = App(master, database.get_connect())
     app.grid(row=0, column=0)
     # app.append_games(["Ich", "bin", "eine", "Liste"])
     master.mainloop()

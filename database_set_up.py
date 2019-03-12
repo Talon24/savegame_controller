@@ -2,7 +2,7 @@
 
 # import datetime
 
-import litedb
+import database
 
 
 def setup(cursor):
@@ -29,7 +29,7 @@ def setup(cursor):
 
 def main():
     """main func"""
-    connection = litedb.get_connect()
+    connection = database.get_connect()
     cursor = connection.cursor()
     setup(cursor)
 
