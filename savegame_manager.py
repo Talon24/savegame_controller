@@ -48,8 +48,11 @@ def save_new_game(path, connection):
     """Inserts a new savegame into the database. Returns change indicator."""
     cursor = connection.cursor()
     connection.commit()
-    with open(path, "rb") as file:
-        content = file.read()
+    try:
+        with open(path, "rb") as file:
+            content = file.read()
+    except OSError:
+        return False  # File cannot be read currently. Trying again later
     file_hash = sha(content)
     if not saved_before(path, file_hash, connection):
         mtime = datetime.datetime.utcfromtimestamp(os.path.getmtime(path))
@@ -325,12 +328,18 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                 message="Double entries in savegame_history table!")
             return
         row = data[0]
-        with open(row["path"], "wb") as file:
-            file.write(row["savegame"])
+        try:
+            with open(row["path"], "wb") as file:
+                file.write(row["savegame"])
+        except OSError:
+            messagebox.showwarning(
+                title="File locked!",
+                message=("The file is currently locked and cannot be written "
+                         "to. Maybe the game is currently saving?"))
 
 
 class App(tk.Frame):  # pylint: disable=R0901
-    """Gui viewer"""
+    """Generates the main GUI window."""
 
     def __init__(self, parent, connection):
         super().__init__(parent)
@@ -427,6 +436,8 @@ def check_watched_files(connection):
     cursor = connection.cursor()
     updated = []
     for path in get_paths(cursor):
+        if not os.path.exists(path):
+            continue
         updated.append(save_new_game(path, connection))
         connection.commit()
     return any(updated)
