@@ -6,13 +6,16 @@ import time
 import hashlib
 import pathlib
 import datetime
+# import dateutil
 import threading
 import tkinter as tk
-import tkinter.font as tkfont
+from tkinter import font
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import simpledialog
 # import tkinter.ttk as ttk
+
+from dateutil import tz
 
 import database
 import database_set_up
@@ -56,6 +59,7 @@ def save_new_game(path, connection):
     file_hash = sha(content)
     if not saved_before(path, file_hash, connection):
         mtime = datetime.datetime.utcfromtimestamp(os.path.getmtime(path))
+        # TODO: gpbierdgerdpayhjgögdhidfuhg sommerzeit ikdulgdh utc ikuegeg
         sql = "insert into savegame_history values (?, ?, ?, ?)"
         cursor.execute(sql, (path, mtime, content, file_hash))
         connection.commit()
@@ -70,6 +74,18 @@ def get_paths(cursor):
     cursor.execute(sql)
     paths = [row[0] for row in cursor.fetchall()]
     return paths
+
+
+def to_local_time(date):
+    """Convert a utc datetime to local time."""
+    from_zone = tz.tzutc()
+    to_zone = tz.tzlocal()
+    # Tell the datetime object that it's in UTC time zone since
+    # datetime objects are 'naive' by default
+    date = date.replace(tzinfo=from_zone)
+
+    # Convert time zone
+    return date.astimezone(to_zone)
 
 
 def check_db(connection):
@@ -197,7 +213,7 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         cursor = self.parent.cursor
         listbox = self.listbox
         gamename = self.parent.games.get_selected()  # all selected
-        if gamename is None:
+        if gamename is None or len(gamename) > 1:
             return
         gamename = gamename[0]  # first selected
         sql = ("select path from games "
@@ -263,11 +279,19 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         self.listbox = listbox
         self.data = None
 
+    def delete(self):
+        """Delete an entry."""
+        path = self.get_selected()
+        if path is None:
+            return
+        path = path[0]
+        delete("savegame", path)
+
     def update_content(self):
         """Refresh the contents of the listbox."""
         cursor = self.parent.cursor
         path = self.parent.savegames.get_selected_path()  # all selected
-        if path is None:
+        if path is None or len(path) > 1:
             return
         path = path[0]  # first path
         listbox = self.listbox
@@ -280,6 +304,7 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         self.data = cursor.fetchall()
         titles = [row[0] for row in self.data]
         for item in titles:
+            item = to_local_time(item)
             item = item.strftime("%y-%m-%d %H:%M:%S")
             self.listbox.insert(tk.END, item)
         self.listbox.select_set(0)
@@ -403,6 +428,17 @@ class App(tk.Frame):  # pylint: disable=R0901
             self.savegame_states.update_content()
 
 
+def delete(mode, keys):
+    """Delete entry from the database."""
+    statements = {
+        "data": "delete from savegame_history where path = ? and date = ?",
+        "savegame": "delete from games where path = ?",
+        "game": "delte from games where game = ?"
+    }
+    sql = statements[mode]
+    # TODO: Checker in thread locks database
+
+
 def check_for_updates():
     """Look for updates, reload gui if required."""
     thread = threading.Thread(target=watch_files_caller,
@@ -451,7 +487,7 @@ def main():
     check_watched_files(connection)
     connection.close()
     master = tk.Tk()
-    default_font = tkfont.nametofont("TkDefaultFont")
+    default_font = font.nametofont("TkDefaultFont")
     default_font.configure(size=16)
     master.option_add("*Font", default_font)
     app = App(master, database.get_connect())
