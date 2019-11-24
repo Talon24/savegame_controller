@@ -101,13 +101,13 @@ def check_db(connection):
 
 class GameSelect(tk.Frame):  # pylint: disable=R0901
     """The listbox that contains the games."""
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         self.parent = parent
         label = tk.Label(self, text="Games")
         label.grid(row=0, column=0, sticky="NEWS")
         scrollbar = tk.Scrollbar(self, orient="vertical")
-        scrollbar.grid(row=1, column=1, sticky="NS")
+        scrollbar.grid(row=1, column=1, sticky="NES")
         listbox = tk.Listbox(self, width=40, yscrollcommand=scrollbar.set)
         scrollbar.config(command=listbox.yview)
         listbox.configure(exportselection=False)
@@ -115,6 +115,9 @@ class GameSelect(tk.Frame):  # pylint: disable=R0901
                      # lambda x: self.update_savegame_list())
                      lambda x: self.parent.trigger_update(1))
         listbox.grid(row=1, column=0, sticky="NEWS")
+        tk.Grid.rowconfigure(self, 1, weight=1)
+        tk.Grid.columnconfigure(self, 0, weight=1)
+        tk.Grid.columnconfigure(self, 1, weight=0)
         listbox.popup_menu = tk.Menu(listbox, tearoff=0)
         listbox.popup_menu.add_command(
             label="Delete", command=lambda x: print("Delete"))
@@ -181,6 +184,9 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
                      # lambda x: self.update_savegame_states_box())
                      lambda x: self.parent.trigger_update(0))
         listbox.grid(row=1, column=0, sticky="NEWS")
+        tk.Grid.rowconfigure(self, 1, weight=1)
+        tk.Grid.columnconfigure(self, 0, weight=1)
+        tk.Grid.columnconfigure(self, 1, weight=0)
 
         listbox.popup_menu = tk.Menu(listbox, tearoff=0)
         listbox.popup_menu.add_command(
@@ -263,13 +269,16 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                              yscrollcommand=scrollbar.set)
         listbox.configure(exportselection=False)
         scrollbar.config(command=listbox.yview)
-        scrollbar.grid(row=1, column=1, sticky="NS")
+        scrollbar.grid(row=1, column=1, sticky="NES")
         # for item in ["2015", "2016", "2017", "2018"]:
         #     listbox.insert(tk.END, item)
         # listbox.bind(
         #     "<<ListboxSelect>>",
         #     lambda x: print(self.get_identifier()))
         listbox.grid(row=1, column=0, sticky="NEWS")
+        tk.Grid.rowconfigure(self, 1, weight=1)
+        tk.Grid.columnconfigure(self, 0, weight=1)
+        tk.Grid.columnconfigure(self, 1, weight=0)
 
         button = tk.Button(self, text="Refresh",
                            command=lambda: self.parent.trigger_update(0))
@@ -423,8 +432,8 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
 class App(tk.Frame):  # pylint: disable=R0901
     """Generates the main GUI window."""
 
-    def __init__(self, parent, connection):
-        super().__init__(parent)
+    def __init__(self, parent, connection, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
         # self.parent = parent  # Not needed?
         connection.row_factory = database.sqlite3.Row
         self.connection = connection
@@ -441,9 +450,20 @@ class App(tk.Frame):  # pylint: disable=R0901
         self.savegames = SavegameSelect(self)
         self.savegame_states = SavegameStateSelect(self)
 
-        self.games.grid(row=1, column=0)
-        self.savegames.grid(row=1, column=1)
-        self.savegame_states.grid(row=1, column=2, sticky="N")
+        self.games.grid(row=0, column=0, sticky="NEWS")
+        self.savegames.grid(row=0, column=1, sticky="NEWS")
+        self.savegame_states.grid(row=0, column=2, sticky="NEWS")
+        tk.Grid.columnconfigure(self, 0, weight=1)
+        tk.Grid.columnconfigure(self, 1, weight=1)
+        tk.Grid.columnconfigure(self, 2, weight=1)
+        tk.Grid.columnconfigure(self, 4, weight=0)
+        tk.Grid.rowconfigure(self, 0, weight=1)
+        # tk.Grid.rowconfigure(self.games, 0, weight=1)
+        # tk.Grid.columnconfigure(self.games, 0, weight=1)
+        # tk.Grid.rowconfigure(self.savegames, 0, weight=1)
+        # tk.Grid.columnconfigure(self.savegames, 0, weight=1)
+        # tk.Grid.rowconfigure(self.savegame_states, 0, weight=1)
+        # tk.Grid.columnconfigure(self.savegame_states, 0, weight=1)
 
         # self.update_games()
         # self.update_savegame_list()
@@ -458,7 +478,7 @@ class App(tk.Frame):  # pylint: disable=R0901
                 return
             self.savegame_states.write_file()
         button = tk.Button(self, text="Restore", command=restore_function)
-        button.grid(row=1, column=4)
+        button.grid(row=0, column=4)
 
         check_for_updates()
 
@@ -554,7 +574,11 @@ def main():
     default_font.configure(size=16)
     master.option_add("*Font", default_font)
     app = App(master, database.get_connect())
-    app.grid(row=0, column=0)
+    app.grid(row=0, column=0, sticky="NEWS")
+    tk.Grid.rowconfigure(master, 0, weight=1)
+    tk.Grid.columnconfigure(master, 0, weight=1)
+    tk.Grid.rowconfigure(app, 0, weight=1)
+    tk.Grid.columnconfigure(app, 0, weight=1)
     # app.append_games(["Ich", "bin", "eine", "Liste"])
     master.mainloop()
     # print(connection)
