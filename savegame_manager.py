@@ -280,6 +280,8 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         listbox.popup_menu.add_separator()
         listbox.popup_menu.add_command(
             label="Delete", command=self.delete)
+        listbox.popup_menu.add_command(
+            label="Export...", command=self.export)
         # listbox.popup_menu.add_command(
         #     label="Select All", command=lambda: print())
         listbox.bind("<Button-3>", lambda x: self.parent.popup(listbox, x))
@@ -301,18 +303,46 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                    "".format(len(dates)))
         if not messagebox.askokcancel("Confirm deletion", message):
             return
-        with self.parent.connection as conn:
-            cursor = conn.cursor()
-            try:
+        try:
+            with self.parent.connection as conn:
+                cursor = conn.cursor()
                 for date in dates:
                     delete(cursor, "data", date, path)
-                conn.commit()
                 for idx in sorted(savegame_idxs, reverse=True):
                     # Reversed to start removing from the bottom as delete
                     # starts counting from the top
                     self.listbox.delete(idx)
-            except AssertionError:
-                conn.rollback()
+        except AssertionError:
+            pass
+
+    def export(self):
+        """Download a savegame file from the database."""
+        selection = self.get_selected()
+        if len(selection) != 1:
+            messagebox.showerror(title="Multiple Entries are selected",
+                                 message="You cannot yet export "
+                                 "multiple savegames.")
+            return
+        row = self.data[selection[0]]
+        path = pathlib.Path(row["path"]).parent
+        name = pathlib.Path(row["path"]).name
+        target = filedialog.asksaveasfilename(
+            parent=self, initialdir=path, initialfile=name,
+            title="Select a name to save the savegame state as.")
+        if target:
+            cursor = self.parent.cursor
+            sql = ("select savegame from savegame_history "
+                   "where date = ? and path = ?")
+            cursor.execute(sql, (row["date"], row["path"]))
+            data = cursor.fetchall()
+            if len(data) > 1:
+                messagebox.showerror(
+                    title="Database Inconsistency!",
+                    message="Double entries in savegame_history table!")
+                return
+            data = data[0][0]
+            with open(target, "wb") as file:
+                file.write(data)
 
     def update_content(self):
         """Refresh the contents of the listbox."""
