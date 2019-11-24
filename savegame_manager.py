@@ -399,15 +399,6 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         """Get the currently selected index in the listbox."""
         return self.listbox.curselection()
 
-    # def get_identifier(self):
-    #     """Get the date and the path of the current selection."""
-    #     if len(self.get_selected()) != 1:
-    #         messagebox.showerror(title="Multiple Entries are selected",
-    #                              message="You cannot restore "
-    #                              "multiple file versions!")
-    #         return None
-    #     row = self.data[self.get_selected()[0]]
-    #     return row["date"], row["path"]
 
     def write_file(self):
         """Replace the current savegame with the selected one."""
@@ -477,16 +468,7 @@ class App(tk.Frame):  # pylint: disable=R0901
         tk.Grid.columnconfigure(self, 2, weight=1)
         tk.Grid.columnconfigure(self, 4, weight=0)
         tk.Grid.rowconfigure(self, 0, weight=1)
-        # tk.Grid.rowconfigure(self.games, 0, weight=1)
-        # tk.Grid.columnconfigure(self.games, 0, weight=1)
-        # tk.Grid.rowconfigure(self.savegames, 0, weight=1)
-        # tk.Grid.columnconfigure(self.savegames, 0, weight=1)
-        # tk.Grid.rowconfigure(self.savegame_states, 0, weight=1)
-        # tk.Grid.columnconfigure(self.savegame_states, 0, weight=1)
 
-        # self.update_games()
-        # self.update_savegame_list()
-        # self.update_savegame_states_box()
         self.trigger_update(2)
 
         def restore_function():
