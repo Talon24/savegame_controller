@@ -279,7 +279,7 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         listbox.popup_menu.add_command(label="Abort")
         listbox.popup_menu.add_separator()
         listbox.popup_menu.add_command(
-            label="Delete", command=lambda: print("Delete"))
+            label="Delete", command=self.delete)
         # listbox.popup_menu.add_command(
         #     label="Select All", command=lambda: print())
         listbox.bind("<Button-3>", lambda x: self.parent.popup(listbox, x))
@@ -289,11 +289,30 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
 
     def delete(self):
         """Delete an entry."""
-        path = self.get_selected()
-        if path is None:
+        savegame_idxs = self.get_selected()
+        path = self.parent.savegames.get_selected_path()  # all selected
+        if path is None or len(path) > 1:
             return
-        path = path[0]
-        delete("savegame", path)
+        path = path[0]  # first path
+        dates = [self.data[i][0] for i in savegame_idxs]
+        if savegame_idxs is None:
+            return
+        message = ("Do you really want to delete these {} elements?"
+                   "".format(len(dates)))
+        if not messagebox.askokcancel("Confirm deletion", message):
+            return
+        with self.parent.connection as conn:
+            cursor = conn.cursor()
+            try:
+                for date in dates:
+                    delete(cursor, "data", date, path)
+                conn.commit()
+                for idx in sorted(savegame_idxs, reverse=True):
+                    # Reversed to start removing from the bottom as delete
+                    # starts counting from the top
+                    self.listbox.delete(idx)
+            except AssertionError:
+                conn.rollback()
 
     def update_content(self):
         """Refresh the contents of the listbox."""
@@ -436,7 +455,7 @@ class App(tk.Frame):  # pylint: disable=R0901
             self.savegame_states.update_content()
 
 
-def delete(mode, keys):
+def delete(cursor, mode, key=None, path=None):
     """Delete entry from the database."""
     statements = {
         "data": "delete from savegame_history where path = ? and date = ?",
@@ -445,6 +464,12 @@ def delete(mode, keys):
     }
     sql = statements[mode]
     # TODO: Checker in thread locks database
+    if mode == "data":
+        assert path is not None
+        assert key is not None
+        print(type(path), path)
+        print(type(key), key)
+        cursor.execute(sql, (path, key))
 
 
 def check_for_updates():
