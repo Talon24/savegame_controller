@@ -14,6 +14,7 @@ from tkinter import font
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import simpledialog
+from tkinter.ttk import Progressbar
 # import tkinter.ttk as ttk
 
 from dateutil import tz
@@ -72,7 +73,11 @@ def save_new_game(path, connection):
 def get_paths(cursor):
     """Get the currently watched paths."""
     sql = "select path from games"
-    cursor.execute(sql)
+    try:
+        cursor.execute(sql)
+    except database.sqlite3.OperationalError:
+        # database locked
+        return []
     paths = [row[0] for row in cursor.fetchall()]
     return paths
 
@@ -97,6 +102,16 @@ def check_db(connection):
     except database.sqlite3.OperationalError:
         database_set_up.setup(cursor)
         print("Setting up Database!")
+
+
+def center(win):
+    """Move a window to the center of the screen"""
+    win.update_idletasks()
+    width = win.winfo_width()
+    height = win.winfo_height()
+    x_pos = (win.winfo_screenwidth() // 2) - (width // 2)
+    y_pos = (win.winfo_screenheight() // 2) - (height // 2)
+    win.geometry('{}x{}+{}+{}'.format(width, height, x_pos, y_pos))
 
 
 class GameSelect(tk.Frame):  # pylint: disable=R0901
@@ -312,8 +327,9 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                    "".format(len(dates)))
         if not messagebox.askokcancel("Confirm deletion", message):
             return
+        conn = self.parent.connection
         try:
-            with self.parent.connection as conn:
+            with conn:
                 cursor = conn.cursor()
                 for date in dates:
                     delete(cursor, "data", date, path)
@@ -321,6 +337,7 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
                     # Reversed to start removing from the bottom as delete
                     # starts counting from the top
                     self.listbox.delete(idx)
+            # conn.execute("VACUUM")
         except AssertionError:
             pass
 
@@ -335,8 +352,10 @@ class SavegameStateSelect(tk.Frame):  # pylint: disable=R0901
         row = self.data[selection[0]]
         path = pathlib.Path(row["path"]).parent
         name = pathlib.Path(row["path"]).name
+        suffix = pathlib.Path(row["path"]).suffix
         target = filedialog.asksaveasfilename(
             parent=self, initialdir=path, initialfile=name,
+            defaultextension=suffix,
             title="Select a name to save the savegame state as.")
         if target:
             cursor = self.parent.cursor
@@ -477,8 +496,13 @@ class App(tk.Frame):  # pylint: disable=R0901
                 print("No game state selected!")
                 return
             self.savegame_states.write_file()
-        button = tk.Button(self, text="Restore", command=restore_function)
-        button.grid(row=0, column=4)
+        buttonframe = tk.Frame(self)
+        buttonframe.grid(row=0, column=4)
+        button = tk.Button(buttonframe, text="Restore", command=restore_function)
+        button.grid(row=0, column=0, sticky="EW")
+        button = tk.Button(self, text="Vacuum",
+                           command=lambda: Vacuum(self))
+        button.grid(row=0, column=4, sticky="SEW")
 
         check_for_updates()
 
@@ -503,6 +527,40 @@ class App(tk.Frame):  # pylint: disable=R0901
             self.savegames.update_content()
         if level >= 0:
             self.savegame_states.update_content()
+
+
+class Vacuum(tk.Toplevel):
+    """Window to select and Path to analyze and start generation."""
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+        self.transient(parent)
+        self.finished = False
+        self.title("Vacuuming")
+        progress = Progressbar(self, orient=tk.HORIZONTAL, mode='indeterminate')
+        self.progress = progress
+        text = tk.Label(self, text="Vacuuming in progress. Please wait...")
+        text.grid(row=0, column=0)
+        self.progress.grid(row=1, sticky="ews")
+        self.update()
+        center(self)
+
+        thread = threading.Thread(target=vacuum)
+        thread.daemon = True
+        thread.start()
+        while thread.is_alive():
+            self.progress.step(amount=1)
+            self.progress.update()
+            self.update()
+            time.sleep(0.01)
+        self.progress.grid_forget()
+        self.finished = True
+        self.destroy()
+
+
+def vacuum():
+    """Vacuum the database. New connection for separate thread."""
+    connection = database.get_connect()
+    connection.execute("VACUUM")
 
 
 def delete(cursor, mode, key=None, path=None):
@@ -570,6 +628,7 @@ def main():
     check_watched_files(connection)
     connection.close()
     master = tk.Tk()
+    master.title("Savegame Manager")
     default_font = font.nametofont("TkDefaultFont")
     default_font.configure(size=16)
     master.option_add("*Font", default_font)
