@@ -6,6 +6,7 @@ import time
 import hashlib
 import pathlib
 import datetime
+import collections
 # import dateutil
 import threading
 import tkinter as tk
@@ -222,8 +223,15 @@ class SavegameSelect(tk.Frame):  # pylint: disable=R0901
         cursor.execute(sql, (gamename,))
         self.data = cursor.fetchall()
         listbox.delete(0, tk.END)
+        filename_counter = collections.Counter(
+            [pathlib.Path(row[0]).parts[-1] for row in self.data])
+        filenames = dict(filename_counter.items())
         for path in [row[0] for row in self.data]:
-            filename = pathlib.Path(path).parts[-1]
+            shortname = pathlib.Path(path).parts[-1]
+            if filenames[shortname] == 1:
+                filename = pathlib.Path(path).parts[-1]
+            else:
+                filename = path
             listbox.insert(tk.END, filename)
         listbox.select_set(0)
         self.parent.connection.commit()
